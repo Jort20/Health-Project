@@ -53,4 +53,4 @@ After calibration, the tracker will automatically start logging data to `focus_d
 
 ## License / Authors
 
-Developed by SOLJERS.
+Developed by Break point.
