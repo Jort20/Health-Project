@@ -1,3 +1,11 @@
+"""Interactive fullscreen demo for real-time EyeTrax gaze estimation.
+
+This script loads a pre-trained gaze model (or runs an interactive calibration
+routine), configures a temporal smoothing filter (Kalman, KDE, or none), and
+renders a fullscreen overlay showing the live gaze cursor, confidence contours,
+webcam preview thumbnail, FPS counter, and blink detection status.
+"""
+
 import os
 import time
 
@@ -24,7 +32,8 @@ from eyetrax.utils.screen import get_screen_size
 from eyetrax.utils.video import camera, fullscreen, iter_frames
 
 
-def run_demo():
+def run_demo() -> None:
+    """Initialize estimator, calibrate if needed, and run the live gaze tracking UI."""
     args = parse_common_args()
 
     filter_method = args.filter
@@ -36,6 +45,7 @@ def run_demo():
 
     gaze_estimator = GazeEstimator(model_name=args.model)
 
+    # Load existing model weights or run the selected calibration routine
     if args.model_file and os.path.isfile(args.model_file):
         gaze_estimator.load_model(args.model_file)
         print(f"[demo] Loaded gaze model from {args.model_file}")
@@ -57,6 +67,7 @@ def run_demo():
 
     screen_width, screen_height = get_screen_size()
 
+    # Configure and tune the chosen gaze-coordinate smoothing filter
     if filter_method == "kalman":
         kalman = make_kalman()
         smoother = KalmanSmoother(kalman)
@@ -72,6 +83,7 @@ def run_demo():
         kalman = None
         smoother = NoSmoother()
 
+    # Load custom background image or fall back to a solid dark gray canvas
     if background_path and os.path.isfile(background_path):
         background = cv2.imread(background_path)
         background = cv2.resize(background, (screen_width, screen_height))
@@ -91,6 +103,7 @@ def run_demo():
         for frame in iter_frames(cap):
             features, blink_detected = gaze_estimator.extract_features(frame)
 
+            # Predict and smooth gaze coordinates when eyes are open and tracked
             if features is not None and not blink_detected:
                 gaze_point = gaze_estimator.predict(np.array([features]))[0]
                 x, y = map(int, gaze_point)
@@ -105,16 +118,20 @@ def run_demo():
 
             canvas = background.copy()
 
+            # Draw KDE probability density contours if enabled
             if filter_method == "kde" and contours:
                 cv2.drawContours(canvas, contours, -1, (15, 182, 242), 5)
 
+            # Render faded gaze cursor on screen
             if x_pred is not None and y_pred is not None and cursor_alpha > 0:
                 draw_cursor(canvas, x_pred, y_pred, cursor_alpha)
 
+            # Overlay live webcam thumbnail in the bottom-right corner
             thumb = make_thumbnail(frame, size=(cam_width, cam_height), border=BORDER)
             h, w = thumb.shape[:2]
             canvas[-h - MARGIN : -MARGIN, -w - MARGIN : -MARGIN] = thumb
 
+            # Calculate and render frame rate and blink status HUD
             now = time.time()
             fps = 1 / (now - prev_time)
             prev_time = now
@@ -142,6 +159,7 @@ def run_demo():
                 cv2.LINE_AA,
             )
 
+            # Exit loop when ESC key (27) is pressed
             cv2.imshow("Gaze Estimation", canvas)
             if cv2.waitKey(1) == 27:
                 break
