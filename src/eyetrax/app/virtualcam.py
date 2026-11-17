@@ -1,8 +1,9 @@
+import csv
 import os
+import time
 
 import cv2
 import numpy as np
-import pyvirtualcam
 
 from eyetrax.calibration import (
     run_5_point_calibration,
@@ -71,46 +72,30 @@ def run_virtualcam():
         kalman = None
         smoother = NoSmoother()
 
-    green_bg = np.zeros((screen_height, screen_width, 3), dtype=np.uint8)
-    green_bg[:] = (0, 255, 0)
+    with camera(camera_index) as cap, open("gaze_data.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["timestamp", "x_raw", "y_raw", "x_smooth", "y_smooth", "blink", "ear"])
+        print("Tracking gestart -> gaze_data.csv (Ctrl+C om te stoppen)")
 
-    with camera(camera_index) as cap:
-        cam_fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
-        with pyvirtualcam.Camera(
-            width=screen_width,
-            height=screen_height,
-            fps=cam_fps,
-            fmt=pyvirtualcam.PixelFormat.BGR,
-        ) as cam:
-            print(f"Virtual camera started: {cam.device}")
+        try:
             for frame in iter_frames(cap):
                 features, blink_detected = gaze_estimator.extract_features(frame)
+
+                if features is not None and len(gaze_estimator._ear_history) > 0:
+                    ear = round(float(gaze_estimator._ear_history[-1]), 4)
+                else:
+                    ear = ""
 
                 if features is not None and not blink_detected:
                     gaze_point = gaze_estimator.predict(np.array([features]))[0]
                     x, y = map(int, gaze_point)
                     x_pred, y_pred = smoother.step(x, y)
-                    contours = smoother.debug.get("contours", [])
                 else:
-                    x_pred = y_pred = None
-                    contours = []
+                    x = y = x_pred = y_pred = ""
 
-                output = green_bg.copy()
-                if contours:
-                    cv2.drawContours(output, contours, -1, (0, 0, 255), 3)
-                if x_pred is not None and y_pred is not None:
-                    draw_cursor(
-                        output,
-                        x_pred,
-                        y_pred,
-                        alpha=1.0,
-                        radius_outer=10,
-                        radius_inner=0,
-                        color_outer=(0, 0, 255),
-                    )
-
-                cam.send(output)
-                cam.sleep_until_next_frame()
+                writer.writerow([time.time(), x, y, x_pred, y_pred, int(blink_detected), ear])
+        except KeyboardInterrupt:
+            print("\nGestopt en opgeslagen in gaze_data.csv")
 
 
 if __name__ == "__main__":
