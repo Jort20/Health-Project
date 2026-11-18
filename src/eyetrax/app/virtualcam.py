@@ -1,3 +1,9 @@
+"""
+Module for running an eyetracking session combined with audio monitoring.
+The collected data (raw and smoothed gaze direction, blink detection, and sound levels) 
+is continuously written to a CSV file for later analysis.
+"""
+
 import csv
 from datetime import datetime
 import os
@@ -29,6 +35,10 @@ from eyetrax.utils.video import camera, iter_frames
 
 
 class AmbientAudioMonitor:
+    """
+    Class for monitoring ambient noise (in decibels) in the background.
+    Reads the microphone asynchronously without blocking the main eyetracker thread.
+    """
     def __init__(self, samplerate: int = 16000, db_offset: float = 90.0):
         self.samplerate = samplerate
         self.db_offset = db_offset
@@ -38,6 +48,7 @@ class AmbientAudioMonitor:
         self._stream = None
 
     def _callback(self, indata, frames, time_info, status):
+        """Internal callback function called by sounddevice when new audio data arrives."""
         mono = indata[:, 0]
         rms = float(np.sqrt(np.mean(np.square(mono))))
         peak = float(np.max(np.abs(mono)))
@@ -46,6 +57,7 @@ class AmbientAudioMonitor:
             self._peak_buffer.append(peak)
 
     def start(self):
+        """Starts the microphone stream and begins listening to the environment."""
         try:
             self._stream = sd.InputStream(
                 channels=1,
@@ -54,10 +66,17 @@ class AmbientAudioMonitor:
             )
             self._stream.start()
         except Exception as e:
-            print(f"[waarschuwing] Microfoon kon niet worden gestart: {e}")
+            print(f"[warning] Microphone could not be started: {e}")
             self._stream = None
 
     def read_interval(self):
+        """
+        Processes the collected audio data since the last time this function was called.
+
+        Returns:
+            tuple: (mean_sound_level_db, peak_sound_level_db). 
+                   Returns ("", "") if no data is available.
+        """
         if self._stream is None:
             return "", ""
         with self._lock:
@@ -73,12 +92,23 @@ class AmbientAudioMonitor:
         return db_mean, db_peak
 
     def stop(self):
+        """Stops the audio stream and closes the microphone."""
         if self._stream is not None:
             self._stream.stop()
             self._stream.close()
 
 
 def run_virtualcam():
+    """
+    Main function to initialize and run the application.
+    
+    Process:
+    1. Parses command-line arguments.
+    2. Loads or calibrates the GazeEstimator model.
+    3. Sets up the chosen filter/smoother (e.g., Kalman) for stable coordinates.
+    4. Starts audio monitoring and the webcam.
+    5. Loop per frame: calculates gaze direction (x, y), audio DB, and writes everything to a CSV file.
+    """
     args = parse_common_args()
 
     filter_method = args.filter
@@ -89,6 +119,7 @@ def run_virtualcam():
 
     gaze_estimator = GazeEstimator(model_name=args.model)
 
+    # Initialize or calibrate the model
     if args.model_file and os.path.isfile(args.model_file):
         gaze_estimator.load_model(args.model_file)
         print(f"[virtualcam] Loaded gaze model from {args.model_file}")
@@ -110,6 +141,7 @@ def run_virtualcam():
 
     screen_width, screen_height = get_screen_size()
 
+    # Set up the chosen smoothing filter
     if filter_method == "kalman":
         kalman = make_kalman()
         smoother = KalmanSmoother(kalman)
@@ -145,18 +177,20 @@ def run_virtualcam():
             "sound_db",
             "sound_peak_db",
         ])
-        print(f"Tracking gestart -> {csv_path} (Ctrl+C om te stoppen)")
+        print(f"Tracking started -> {csv_path} (Ctrl+C to stop)")
 
         try:
             for frame in iter_frames(cap):
                 features, blink_detected = gaze_estimator.extract_features(frame)
                 sound_db, sound_peak_db = audio_monitor.read_interval()
 
+                # Retrieve Eye Aspect Ratio (EAR)
                 if features is not None and len(gaze_estimator._ear_history) > 0:
                     ear = round(float(gaze_estimator._ear_history[-1]), 4)
                 else:
                     ear = ""
 
+                # Calculate gaze location if eyes are open
                 if features is not None and not blink_detected:
                     gaze_point = gaze_estimator.predict(np.array([features]))[0]
                     x, y = map(int, gaze_point)
@@ -176,7 +210,7 @@ def run_virtualcam():
                     sound_peak_db,
                 ])
         except KeyboardInterrupt:
-            print(f"\nGestopt en opgeslagen in {csv_path}")
+            print(f"\nStopped and saved to {csv_path}")
         finally:
             audio_monitor.stop()
 
