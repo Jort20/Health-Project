@@ -1,6 +1,6 @@
 # Eyetrax: Advanced Webcam-Based Eye-Tracking
 
-This eyetracker offers a real-time eye-tracking solution using a standard webcam. It combines computer vision, machine learning, and mathematical filters to accurately record gaze direction, blink frequency, and ambient noise levels.
+This eyetracker offers a eye-tracking solution using a standard webcam. It combines computer vision, machine learning, and mathematical filters to accurately record gaze direction, blink frequency, and ambient noise levels.
 
 **Attribution:** 
 This project builds upon and utilizes the core architecture of the original EyeTrax software:
