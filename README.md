@@ -174,5 +174,3 @@ All data is stored locally.
 * **Head Movement:** Cannot easily distinguish between head turns and eye movements. Keep your head relatively stationary.
 * **Lighting:** Low light or strong backlighting heavily degrades iris detection.
 * **Obstructions:** Thick glasses, lens glare, or hair over the eyes can cause frame drops or `NaN` values.
-
-```
