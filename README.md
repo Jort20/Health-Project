@@ -148,8 +148,7 @@ eyetrax/
 1. **Setup:** Ensure you are in a well-lit room without strong backlighting. Face the webcam directly.
 2. **Start:** Run the command (e.g., `eyetrax-virtualcam --calibration 9p`).
 3. **Follow the Target:** A full-screen window opens with a target point.
-4. **Keep Head Still:** Move *only* your eyes to look at the target.
-5. **Completion:** The window closes automatically once all points are collected, and CSV logging begins.
+4. **Completion:** The window closes automatically once all points are collected, and CSV logging begins.
 
 ---
 
@@ -171,6 +170,5 @@ All data is stored locally.
 
 ## 9. Limitations of Webcam-Based Eye-Tracking
 
-* **Head Movement:** Cannot easily distinguish between head turns and eye movements. Keep your head relatively stationary.
 * **Lighting:** Low light or strong backlighting heavily degrades iris detection.
 * **Obstructions:** Thick glasses, lens glare, or hair over the eyes can cause frame drops or `NaN` values.
