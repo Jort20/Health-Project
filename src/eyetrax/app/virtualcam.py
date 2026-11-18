@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime
 import os
 import threading
 import time
@@ -127,7 +128,11 @@ def run_virtualcam():
     audio_monitor = AmbientAudioMonitor(db_offset=90.0)
     audio_monitor.start()
 
-    with camera(camera_index) as cap, open("gaze_data.csv", "w", newline="") as f:
+    os.makedirs("Data", exist_ok=True)
+    timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    csv_path = os.path.join("Data", f"gaze_data_{timestamp_str}.csv")
+
+    with camera(camera_index) as cap, open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
             "timestamp",
@@ -140,7 +145,7 @@ def run_virtualcam():
             "sound_db",
             "sound_peak_db",
         ])
-        print("Tracking gestart -> gaze_data.csv (Ctrl+C om te stoppen)")
+        print(f"Tracking gestart -> {csv_path} (Ctrl+C om te stoppen)")
 
         try:
             for frame in iter_frames(cap):
@@ -171,7 +176,7 @@ def run_virtualcam():
                     sound_peak_db,
                 ])
         except KeyboardInterrupt:
-            print("\nGestopt en opgeslagen in gaze_data.csv")
+            print(f"\nGestopt en opgeslagen in {csv_path}")
         finally:
             audio_monitor.stop()
 
