@@ -33,6 +33,9 @@ from eyetrax.utils.draw import draw_cursor
 from eyetrax.utils.screen import get_screen_size
 from eyetrax.utils.video import camera, iter_frames
 
+import warnings
+warnings.simplefilter("ignore", UserWarning)
+
 
 class AmbientAudioMonitor:
     """
