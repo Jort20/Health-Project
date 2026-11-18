@@ -1,10 +1,24 @@
+"""Shared command-line argument parser for EyeTrax gaze estimation scripts.
+
+This module defines `parse_common_args`, standardizing CLI flags across EyeTrax
+applications for selecting webcam indices, calibration routines, smoothing filters,
+regression model backends, pre-trained model paths, and display backgrounds.
+"""
+
 import argparse
 
 
-def parse_common_args():
+def parse_common_args() -> argparse.Namespace:
+    """Parse common command-line arguments for EyeTrax calibration and inference.
 
+    Returns:
+        argparse.Namespace: Parsed configuration options including filter type,
+            camera index, calibration method, grid dimensions, regression model
+            backend, and optional pre-trained model file path.
+    """
     parser = argparse.ArgumentParser(description="Common Gaze Estimation Arguments")
 
+    # Temporal/spatial gaze coordinate smoothing options
     parser.add_argument(
         "--filter",
         choices=["kalman", "kalman_ema", "kde", "none"],
@@ -18,6 +32,14 @@ def parse_common_args():
         help="EMA smoothing strength for kalman_ema (0 disables EMA, closer to 1 is smoother)",
     )
     parser.add_argument(
+        "--confidence",
+        type=float,
+        default=0.5,
+        help="Confidence level for KDE smoothing, range 0 to 1",
+    )
+
+    # Hardware and calibration routine settings
+    parser.add_argument(
         "--camera",
         type=int,
         default=0,
@@ -29,6 +51,8 @@ def parse_common_args():
         default="9p",
         help="Calibration method for gaze estimation",
     )
+
+    # Dense grid calibration layout parameters
     parser.add_argument(
         "--grid-rows",
         type=int,
@@ -47,17 +71,13 @@ def parse_common_args():
         default=0.10,
         help="Margin ratio for dense calibration (default 0.10 = 10%)",
     )
+
+    # Display and regression model options
     parser.add_argument(
         "--background",
         type=str,
         default=None,
         help="Path to a custom background image (optional)",
-    )
-    parser.add_argument(
-        "--confidence",
-        type=float,
-        default=0.5,
-        help="Confidence level for KDE smoothing, range 0 to 1",
     )
     parser.add_argument(
         "--model",
@@ -72,4 +92,3 @@ def parse_common_args():
     )
 
     return parser.parse_args()
-
