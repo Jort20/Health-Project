@@ -1,11 +1,20 @@
+"""2D Kalman filter smoother and interactive noise-covariance tuning for EyeTrax.
+
+This module implements `KalmanSmoother`, which wraps an OpenCV constant-velocity
+KalmanFilter to smooth raw 2D gaze coordinates frame by frame. It also provides
+an interactive 3-point fixation fine-tuning routine (`tune`) that estimates
+empirical gaze jitter variance to calibrate `measurementNoiseCov`.
+"""
+
 from __future__ import annotations
 
 import time
-from typing import Tuple
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
 
+from eyetrax.gaze import GazeEstimator
 from eyetrax.utils.screen import get_screen_size
 from eyetrax.utils.video import open_camera
 
@@ -14,8 +23,15 @@ from .base import BaseSmoother
 
 
 class KalmanSmoother(BaseSmoother):
+    """Smooths 2D gaze coordinates using a constant-velocity OpenCV Kalman filter."""
 
-    def __init__(self, kf=None) -> None:
+    def __init__(self, kf: Optional[cv2.KalmanFilter] = None) -> None:
+        """Initialize the Kalman smoother with an existing or default KalmanFilter.
+
+        Args:
+            kf: Optional pre-configured `cv2.KalmanFilter` instance. If None or
+                invalid, a default filter is created via `make_kalman()`.
+        """
         super().__init__()
 
         try:
@@ -26,8 +42,18 @@ class KalmanSmoother(BaseSmoother):
             self.kf = make_kalman()
 
     def step(self, x: int, y: int) -> Tuple[int, int]:
+        """Update the Kalman filter with a new raw (x, y) measurement and return smoothed state.
+
+        Args:
+            x: Raw predicted horizontal screen coordinate in pixels.
+            y: Raw predicted vertical screen coordinate in pixels.
+
+        Returns:
+            Tuple of predicted/smoothed (x, y) screen pixel coordinates.
+        """
         meas = np.array([[float(x)], [float(y)]], dtype=np.float32)
 
+        # Seed filter position on the very first frame to prevent origin jump
         if not np.any(self.kf.statePost):
             self.kf.statePre[:2] = meas
             self.kf.statePost[:2] = meas
@@ -37,12 +63,20 @@ class KalmanSmoother(BaseSmoother):
 
         return int(pred[0, 0]), int(pred[1, 0])
 
-    def tune(self, gaze_estimator, *, camera_index: int = 0):
-        """
-        Quick fine‑tuning pass to adjust Kalman filter's measurementNoiseCov
+    def tune(self, gaze_estimator: GazeEstimator, *, camera_index: int = 0) -> None:
+        """Run a 3-point fixation pass to calibrate `measurementNoiseCov` from gaze jitter.
+
+        Presents three triangular target points on screen; once the user fixates near
+        each target, raw gaze samples are collected to measure spatial variance and
+        update the Kalman filter's measurement noise matrix.
+
+        Args:
+            gaze_estimator: Trained GazeEstimator used to predict live gaze coordinates.
+            camera_index: Webcam device index.
         """
         screen_width, screen_height = get_screen_size()
 
+        # Define 3 triangular fixation targets across the screen
         points_tpl = [
             (screen_width // 2, screen_height // 4),
             (screen_width // 4, 3 * screen_height // 4),
@@ -80,6 +114,7 @@ class KalmanSmoother(BaseSmoother):
             features, blink_detected = gaze_estimator.extract_features(frame)
             canvas = np.zeros((screen_height, screen_width, 3), dtype=np.uint8)
 
+            # Render remaining active target dots
             for point in points:
                 cv2.circle(canvas, point["position"], 20, (0, 255, 0), -1)
 
@@ -103,6 +138,7 @@ class KalmanSmoother(BaseSmoother):
                 gaze_x, gaze_y = map(int, gaze_point)
                 cv2.circle(canvas, (gaze_x, gaze_y), 10, (255, 0, 0), -1)
 
+                # Check gaze proximity against each remaining target point
                 for point in points[:]:
                     dx, dy = (
                         gaze_x - point["position"][0],
@@ -113,6 +149,7 @@ class KalmanSmoother(BaseSmoother):
                             point["start_time"] = now
                         elapsed = now - point["start_time"]
 
+                        # Begin recording samples after the initial fixation dwell delay
                         if (
                             not point["data_collection_started"]
                             and elapsed >= initial_delay
@@ -123,6 +160,7 @@ class KalmanSmoother(BaseSmoother):
                         if point["data_collection_started"]:
                             data_elapsed = now - point["collection_start_time"]
                             point["collected_gaze"].append([gaze_x, gaze_y])
+                            # Jitter target dot visually to indicate active capture progress
                             shake = int(
                                 5 + (data_elapsed / data_collection_duration) * 20
                             )
@@ -137,8 +175,10 @@ class KalmanSmoother(BaseSmoother):
                                 gaze_positions.extend(point["collected_gaze"])
                                 points.remove(point)
                         else:
+                            # Draw yellow ring during initial fixation lock-on
                             cv2.circle(canvas, point["position"], 25, (0, 255, 255), 2)
                     else:
+                        # Reset point state if gaze drifts outside proximity threshold
                         point.update(
                             start_time=None,
                             data_collection_started=False,
@@ -159,6 +199,7 @@ class KalmanSmoother(BaseSmoother):
         if gaze_positions.shape[0] < 2:
             return
 
+        # Set diagonal measurement noise covariance from observed gaze variance
         var = np.var(gaze_positions, axis=0)
         var[var == 0] = 1e-4
         self.kf.measurementNoiseCov = np.array(
